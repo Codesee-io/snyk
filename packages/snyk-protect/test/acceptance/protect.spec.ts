@@ -6,6 +6,7 @@ import * as analytics from '../../src/lib/analytics';
 import * as path from 'path';
 import * as os from 'os';
 import * as fse from 'fs-extra';
+import { runCommand } from '../util/runCommand';
 
 jest.setTimeout(1000 * 60);
 
@@ -15,40 +16,25 @@ describe('@snyk/protect', () => {
   });
 
   describe('applies patch(es)', () => {
-    it('works for project with a single patchable module', async () => {
-      const log = jest.spyOn(global.console, 'log');
-      const postJsonSpy = jest.spyOn(http, 'postJson');
+    it.only('works for project with a single patchable module', async () => {
       const project = await createProject('single-patchable-module');
       const patchedLodash = await getPatchedLodash();
 
-      await protect(project.path());
+      const { code, stdout, stderr } = await runCommand(
+        'node',
+        [path.resolve(__dirname, '../../dist/index.js')],
+        {
+          cwd: project.path(),
+        },
+      );
+
+      expect(stdout).toMatch('Successfully applied Snyk patches');
+      expect(stderr).toEqual('');
+      expect(code).toEqual(0);
 
       await expect(
         project.read('node_modules/nyc/node_modules/lodash/lodash.js'),
       ).resolves.toEqual(patchedLodash);
-
-      expect(log).toHaveBeenCalledWith('Successfully applied Snyk patches');
-      expect(postJsonSpy).toHaveBeenCalledTimes(1);
-      expect(postJsonSpy.mock.calls[0][1]).toEqual({
-        data: {
-          command: '@snyk/protect',
-          args: [],
-          version: '1.0.0-monorepo',
-          nodeVersion: process.version,
-          metadata: {
-            protectResult: {
-              type: 'APPLIED_PATCHES',
-              patchedModules: [
-                {
-                  vulnId: 'SNYK-JS-LODASH-567746',
-                  packageName: 'lodash',
-                  packageVersion: '4.17.15',
-                },
-              ],
-            },
-          },
-        },
-      });
     });
 
     it('works for project with multiple patchable modules', async () => {
